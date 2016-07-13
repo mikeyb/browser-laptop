@@ -42,6 +42,7 @@ const keytar = require('keytar')
 const settings = require('../js/constants/settings')
 const siteSettings = require('../js/state/siteSettings')
 const spellCheck = require('./spellCheck')
+const ledger = require('./ledger')
 const flash = require('../js/flash')
 const contentSettings = require('../js/state/contentSettings')
 
@@ -254,6 +255,10 @@ app.on('ready', () => {
     if (sessionStateStoreCompleteOnQuit) {
       return
     }
+
+    // When the browser is closing we need to send a signal
+    // to record the currently active location in the ledger
+    ledger.visit('NOOP', new Date().getTime())
 
     e.preventDefault()
 
@@ -496,6 +501,8 @@ app.on('ready', () => {
     AppStore.addChangeListener(() => {
       Menu.init(AppStore.getState().get('settings'))
     })
+
+    ledger.init()
 
     let masterKey
     ipcMain.on(messages.DELETE_PASSWORD, (e, password) => {

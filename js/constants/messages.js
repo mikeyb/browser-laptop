@@ -143,7 +143,11 @@ const messages = {
   // Localization
   LANGUAGE: _, /** @arg {string} langCode, @arg {Array} availableLanguages */
   REQUEST_LANGUAGE: _,
-  STATE_UPDATED: _
+  STATE_UPDATED: _,
+  // Ledger
+  LEDGER_PUBLISHER: _,
+  LEDGER_GENERAL_COMMUNICATION: _,
+  LEDGER_UPDATED: _
 }
 
 module.exports = mapValuesByKeys(messages)
