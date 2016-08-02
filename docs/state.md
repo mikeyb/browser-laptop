@@ -134,7 +134,7 @@ AppStore
     'general.downloads.default-save-path': string, // default path for saving files
     'general.autohide-menu': boolean, // true if the Windows menu should be autohidden
     'general.disable-title-mode': boolean, // true if title mode should always be disabled
-    'search.default-search-engine': string, // path to the open search XML
+    'search.default-search-engine': string, // name of search engine, from js/data/searchProviders.js
     'search.offer-search-suggestions': boolean, // true if suggestions should be offered from the default search engine when available.
     'tabs.switch-to-new-tabs': boolean, // true if newly opened tabs should be focused immediately
     'tabs.paint-tabs': boolean, // true if the page theme color and favicon color should be used for tabs
@@ -156,6 +156,7 @@ AppStore
     'advanced.hardware-acceleration-enabled': boolean, // false if hardware acceleration should be explicitly disabled
     'advanced.default-zoom-level': number, // the default zoom level for sites that have no specific setting
     'advanced.pdfjs-enabled': boolean, // Whether or not to render PDF documents in the browser
+    'advanced.smooth-scroll-enabled': boolean, // false if smooth scrolling should be explicitly disabled
     'shutdown.clear-history': boolean, // true to clear history on shutdown
     'shutdown.clear-downloads': boolean, // true to clear downloads on shutdown
     'shutdown.clear-cache': boolean, // true to clear cache on shutdown
@@ -175,6 +176,22 @@ WindowStore
 {
   activeFrameKey: number,
   previewFrameKey: number,
+  tabs: [{
+    themeColor: string, // css compatible color string
+    computedThemeColor: string, // css computed theme color from the favicon
+    icon: string, // favicon url
+    audioPlaybackActive: boolean, // frame is playing audio
+    audioMuted: boolean, // frame is muted
+    title: string, // page title
+    isPrivate: boolean, // private browsing tab
+    partitionNumber: number, // the session partition to use
+    pinnedLocation: string, // Indicates if a frame is pinned and its pin location
+    provisionalLocation: string,
+    icon: string, // favicon url
+    location: string, // The currently navigated location
+    loading: boolean,
+    frameKey: number
+  }],
   frames: [{
     audioMuted: boolean, // frame is muted
     audioPlaybackActive: boolean, // frame is playing audio
@@ -193,9 +210,9 @@ WindowStore
     partitionNumber: number, // the session partition to use
     loading: boolean,
     themeColor: string, // css compatible color string
+    computedThemeColor: string, // css computed theme color from the favicon
     isFullScreen: boolean, // true if the frame should be shown as full screen
     showFullScreenWarning: boolean, // true if a warning should be shown about full screen
-    computedThemeColor: string, // css computed theme color from the favicon
     startLoadTime: datetime,
     endtLoadTime: datetime,
     guestInstanceId: string, // not persisted
@@ -216,7 +233,7 @@ WindowStore
     fingerprintingProtection: {
       blocked: Array<string>
     },
-    provisionalLocation: string
+    provisionalLocation: string,
     security: {
       isSecure: boolean, // is using https
       loginRequiredDetail: {
@@ -340,5 +357,6 @@ WindowStore
   },
   flashInitialized: boolean, // Whether flash was initialized successfully. Cleared on shutdown.
   cleanedOnShutdown: boolean, // whether app data was successfully cleared on shutdown
+  lastAppVersion: string, // Version of the last file that was saved
 }
 ```

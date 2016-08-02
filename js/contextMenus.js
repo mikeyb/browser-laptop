@@ -32,6 +32,7 @@ const {isIntermediateAboutPage, isUrl} = require('./lib/appUrlUtil')
 const {getBase64FromImageUrl} = require('./lib/imageUtil')
 const urlParse = require('url').parse
 const eventUtil = require('./lib/eventUtil')
+const currentWindow = require('../app/renderer/currentWindow')
 
 const isDarwin = process.platform === 'darwin'
 
@@ -352,23 +353,23 @@ function usernameTemplateInit (usernames, origin, action) {
 }
 
 function tabTemplateInit (frameProps) {
-  const tabKey = frameProps.get('key')
+  const frameKey = frameProps.get('key')
   const items = []
   items.push(
-    CommonMenu.newTabMenuItem(),
+    CommonMenu.newTabMenuItem(frameProps.get('key')),
     CommonMenu.separatorMenuItem,
     {
       label: locale.translation('reloadTab'),
       click: (item, focusedWindow) => {
         if (focusedWindow) {
-          focusedWindow.webContents.send(messages.SHORTCUT_FRAME_RELOAD, tabKey)
+          focusedWindow.webContents.send(messages.SHORTCUT_FRAME_RELOAD, frameKey)
         }
       }
     }, {
       label: locale.translation('clone'),
       click: (item, focusedWindow) => {
         if (focusedWindow) {
-          focusedWindow.webContents.send(messages.SHORTCUT_ACTIVE_FRAME_CLONE, {
+          focusedWindow.webContents.send(messages.SHORTCUT_FRAME_CLONE, frameKey, {
             openInForeground: true
           })
         }
@@ -424,7 +425,7 @@ function tabTemplateInit (frameProps) {
       click: (item, focusedWindow) => {
         if (focusedWindow) {
           // TODO: Don't switch active tabs when this is called
-          focusedWindow.webContents.send(messages.SHORTCUT_CLOSE_FRAME, tabKey)
+          focusedWindow.webContents.send(messages.SHORTCUT_CLOSE_FRAME, frameKey)
         }
       }
     })
@@ -434,21 +435,21 @@ function tabTemplateInit (frameProps) {
     label: locale.translation('closeOtherTabs'),
     click: (item, focusedWindow) => {
       if (focusedWindow) {
-        focusedWindow.webContents.send(messages.SHORTCUT_CLOSE_OTHER_FRAMES, tabKey, true, true)
+        focusedWindow.webContents.send(messages.SHORTCUT_CLOSE_OTHER_FRAMES, frameKey, true, true)
       }
     }
   }, {
     label: locale.translation('closeTabsToRight'),
     click: (item, focusedWindow) => {
       if (focusedWindow) {
-        focusedWindow.webContents.send(messages.SHORTCUT_CLOSE_OTHER_FRAMES, tabKey, true, false)
+        focusedWindow.webContents.send(messages.SHORTCUT_CLOSE_OTHER_FRAMES, frameKey, true, false)
       }
     }
   }, {
     label: locale.translation('closeTabsToLeft'),
     click: (item, focusedWindow) => {
       if (focusedWindow) {
-        focusedWindow.webContents.send(messages.SHORTCUT_CLOSE_OTHER_FRAMES, tabKey, false, true)
+        focusedWindow.webContents.send(messages.SHORTCUT_CLOSE_OTHER_FRAMES, frameKey, false, true)
       }
     }
   }, CommonMenu.separatorMenuItem)
@@ -787,7 +788,7 @@ function mainTemplateInit (nodeProps, frame) {
       },
       copyAddressMenuItem('copyImageAddress', nodeProps.srcURL)
     )
-    if (getSetting(settings.DEFAULT_SEARCH_ENGINE) === 'content/search/google.xml' &&
+    if (getSetting(settings.DEFAULT_SEARCH_ENGINE) === 'Google' &&
       nodeProps.srcURL && urlParse(nodeProps.srcURL).protocol !== 'data:') {
       template.push(
         {
@@ -979,20 +980,20 @@ function onMainContextMenu (nodeProps, frame, contextMenuType) {
     onDownloadsToolbarContextMenu(nodeProps.downloadId, Immutable.fromJS(nodeProps))
   } else {
     const mainMenu = Menu.buildFromTemplate(mainTemplateInit(nodeProps, frame))
-    mainMenu.popup(remote.getCurrentWindow())
+    mainMenu.popup(currentWindow)
   }
 }
 
 function onTabContextMenu (frameProps, e) {
   e.stopPropagation()
   const tabMenu = Menu.buildFromTemplate(tabTemplateInit(frameProps))
-  tabMenu.popup(remote.getCurrentWindow())
+  tabMenu.popup(currentWindow)
 }
 
 function onTabsToolbarContextMenu (activeFrame, closestDestinationDetail, isParent, e) {
   e.stopPropagation()
   const tabsToolbarMenu = Menu.buildFromTemplate(tabsToolbarTemplateInit(activeFrame, closestDestinationDetail, isParent))
-  tabsToolbarMenu.popup(remote.getCurrentWindow())
+  tabsToolbarMenu.popup(currentWindow)
 }
 
 function onDownloadsToolbarContextMenu (downloadId, downloadItem, e) {
@@ -1000,19 +1001,19 @@ function onDownloadsToolbarContextMenu (downloadId, downloadItem, e) {
     e.stopPropagation()
   }
   const downloadsToolbarMenu = Menu.buildFromTemplate(downloadsToolbarTemplateInit(downloadId, downloadItem))
-  downloadsToolbarMenu.popup(remote.getCurrentWindow())
+  downloadsToolbarMenu.popup(currentWindow)
 }
 
 function onTabPageContextMenu (framePropsList, e) {
   e.stopPropagation()
   const tabPageMenu = Menu.buildFromTemplate(tabPageTemplateInit(framePropsList))
-  tabPageMenu.popup(remote.getCurrentWindow())
+  tabPageMenu.popup(currentWindow)
 }
 
 function onUrlBarContextMenu (searchDetail, activeFrame, e) {
   e.stopPropagation()
   const inputMenu = Menu.buildFromTemplate(urlBarTemplateInit(searchDetail, activeFrame, e))
-  inputMenu.popup(remote.getCurrentWindow())
+  inputMenu.popup(currentWindow)
 }
 
 function onBookmarkContextMenu (siteDetail, activeFrame, e) {
@@ -1020,7 +1021,7 @@ function onBookmarkContextMenu (siteDetail, activeFrame, e) {
     e.stopPropagation()
   }
   const menu = Menu.buildFromTemplate(bookmarkTemplateInit(siteDetail, activeFrame))
-  menu.popup(remote.getCurrentWindow())
+  menu.popup(currentWindow)
 }
 
 function onShowBookmarkFolderMenu (bookmarks, bookmark, activeFrame, e) {

@@ -38,6 +38,7 @@ const messages = {
   SHORTCUT_UNDO_CLOSED_FRAME: _,
   SHORTCUT_FRAME_MUTE: _,
   SHORTCUT_FRAME_RELOAD: _, /** @arg {number} key of frame */
+  SHORTCUT_FRAME_CLONE: _, /** @arg {number} key of frame, @arg {object} options such as openInForeground */
   SHORTCUT_NEXT_TAB: _,
   SHORTCUT_PREV_TAB: _,
   // Misc application events
@@ -147,7 +148,9 @@ const messages = {
   // Ledger
   LEDGER_PUBLISHER: _,
   LEDGER_GENERAL_COMMUNICATION: _,
-  LEDGER_UPDATED: _
+  LEDGER_UPDATED: _,
+  // Debugging
+  DEBUG_REACT_PROFILE: _
 }
 
 module.exports = mapValuesByKeys(messages)

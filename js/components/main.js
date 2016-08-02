@@ -7,12 +7,10 @@ const ImmutableComponent = require('./immutableComponent')
 const Immutable = require('immutable')
 const electron = global.require('electron')
 const ipc = electron.ipcRenderer
-const remote = electron.remote
 
 // Actions
 const windowActions = require('../actions/windowActions')
 const webviewActions = require('../actions/webviewActions')
-const loadOpenSearch = require('../lib/openSearch').loadOpenSearch
 const contextMenus = require('../contextMenus')
 const getSetting = require('../settings').getSetting
 const getOrigin = require('../state/siteUtil').getOrigin
@@ -49,13 +47,19 @@ const keyCodes = require('../constants/keyCodes')
 // State handling
 const FrameStateUtil = require('../state/frameStateUtil')
 
+const searchProviders = require('../data/searchProviders')
+
 // Util
 const cx = require('../lib/classSet.js')
 const eventUtil = require('../lib/eventUtil')
 const { isIntermediateAboutPage, getBaseUrl, isNavigatableAboutPage } = require('../lib/appUrlUtil')
+const { getBaseDomain } = require('../lib/baseDomain')
 const siteSettings = require('../state/siteSettings')
 const urlParse = require('url').parse
 const debounce = require('../lib/debounce.js')
+const currentWindow = require('../../app/renderer/currentWindow')
+const emptyMap = new Immutable.Map()
+const emptyList = new Immutable.List()
 
 // Ledger
 const ledgerInterop = require('../ledgerInterop')
@@ -139,6 +143,22 @@ class Main extends ImmutableComponent {
         }
       }
     })
+    ipc.on(messages.DEBUG_REACT_PROFILE, (e, args) => {
+      window.perf = require('react-addons-perf')
+      if (!window.perf.isRunning()) {
+        if (!window.isFirstProfiling) {
+          window.isFirstProfiling = true
+          console.info('See this blog post for more information on profiling: http://benchling.engineering/performance-engineering-with-react/')
+        }
+        currentWindow.openDevTools()
+        console.log('starting to profile...')
+        window.perf.start()
+      } else {
+        window.perf.stop()
+        console.log('profiling stopped. Wasted:')
+        window.perf.printWasted()
+      }
+    })
     ipc.on(messages.OPEN_BRAVERY_PANEL, (e) => {
       if (!this.braveShieldsDisabled) {
         this.onBraveMenu()
@@ -185,23 +205,31 @@ class Main extends ImmutableComponent {
     ipc.on(messages.LEAVE_FULL_SCREEN, this.exitFullScreen.bind(this))
   }
 
-  loadOpenSearch () {
+  loadSearchProviders () {
+    let entries = searchProviders.providers
     let engine = getSetting(settings.DEFAULT_SEARCH_ENGINE)
-    if (this.lastLoadedOpenSearch === undefined || engine !== this.lastLoadedOpenSearch) {
-      loadOpenSearch(engine).then((searchDetail) => windowActions.setSearchDetail(searchDetail))
-      this.lastLoadedOpenSearch = engine
+    if (this.lastLoadedSearchProviders === undefined || engine !== this.lastLoadedSearchProviders) {
+      entries.forEach((entry) => {
+        if (entry.name === engine) {
+          windowActions.setSearchDetail(Immutable.fromJS({
+            searchURL: entry.search,
+            autocompleteURL: entry.autocomplete
+          }))
+          this.lastLoadedSearchProviders = engine
+          return false
+        }
+      })
     }
   }
 
   componentDidUpdate (prevProps) {
-    this.loadOpenSearch()
+    this.loadSearchProviders()
     const activeFrame = FrameStateUtil.getActiveFrame(this.props.windowState)
     const activeFramePrev = FrameStateUtil.getActiveFrame(prevProps.windowState)
     const activeFrameTitle = activeFrame && (activeFrame.get('title') || activeFrame.get('location')) || ''
     const activeFramePrevTitle = activeFramePrev && (activeFramePrev.get('title') || activeFramePrev.get('location')) || ''
-    const win = remote.getCurrentWindow()
-    if (activeFrameTitle !== activeFramePrevTitle && win) {
-      win.setTitle(activeFrameTitle)
+    if (activeFrameTitle !== activeFramePrevTitle) {
+      currentWindow.setTitle(activeFrameTitle)
     }
 
     // If the tab changes or was closed, exit out of full screen to give a better
@@ -224,14 +252,12 @@ class Main extends ImmutableComponent {
           return
         }
       }
-      const activeFrame = FrameStateUtil.getActiveFrame(self.props.windowState)
-
       let openInForeground = getSetting(settings.SWITCH_TO_NEW_TABS) === true || options.openInForeground
       const frameOpts = {
         location: url || config.defaultUrl,
         isPrivate: !!options.isPrivate,
         isPartitioned: !!options.isPartitioned,
-        parentFrameKey: activeFrame.get('key')
+        parentFrameKey: options.parentFrameKey
       }
       if (options.partitionNumber !== undefined) {
         frameOpts.partitionNumber = options.partitionNumber
@@ -341,7 +367,8 @@ class Main extends ImmutableComponent {
     ipc.on(messages.LOGIN_REQUIRED, (e, detail) => {
       const frames = self.props.windowState.get('frames')
         .filter((frame) => frame.get('location') === detail.url ||
-          getOrigin(frame.get('location')) === getOrigin(detail.url))
+          getOrigin(frame.get('location')) === getOrigin(detail.url) ||
+        getBaseDomain(getOrigin(frame.get('location'))) === getBaseDomain(getOrigin(detail.url)))
       frames.forEach((frame) =>
         windowActions.setLoginRequiredDetail(frame, detail))
     })
@@ -355,7 +382,7 @@ class Main extends ImmutableComponent {
       windowActions.setContextMenuDetail()
     })
 
-    this.loadOpenSearch()
+    this.loadSearchProviders()
 
     window.addEventListener('mousemove', (e) => {
       if (e.pageY !== this.pageY) {
@@ -393,22 +420,21 @@ class Main extends ImmutableComponent {
     }, true)
 
     const activeFrame = FrameStateUtil.getActiveFrame(self.props.windowState)
-    const win = remote.getCurrentWindow()
-    if (activeFrame && win) {
-      win.setTitle(activeFrame.get('title'))
+    if (activeFrame) {
+      currentWindow.setTitle(activeFrame.get('title'))
     }
 
     // Handlers for saving window state
-    win.on('maximize', function () {
+    currentWindow.on('maximize', function () {
       windowActions.setMaximizeState(true)
     })
 
-    win.on('unmaximize', function () {
+    currentWindow.on('unmaximize', function () {
       windowActions.setMaximizeState(false)
     })
 
     let moveTimeout = null
-    win.on('move', function (event) {
+    currentWindow.on('move', function (event) {
       if (moveTimeout) {
         clearTimeout(moveTimeout)
       }
@@ -417,11 +443,11 @@ class Main extends ImmutableComponent {
       }, 1000)
     })
 
-    win.on('enter-full-screen', function (event) {
+    currentWindow.on('enter-full-screen', function (event) {
       windowActions.setWindowFullScreen(true)
     })
 
-    win.on('leave-full-screen', function (event) {
+    currentWindow.on('leave-full-screen', function (event) {
       windowActions.setWindowFullScreen(false)
     })
   }
@@ -465,8 +491,7 @@ class Main extends ImmutableComponent {
     const isNavigatable = isNavigatableAboutPage(getBaseUrl(activeFrame.get('location')))
     if (e && eventUtil.isForSecondaryAction(e) && isNavigatable) {
       if (activeFrame && activeFrame.get(navCheckProp)) {
-        const win = remote.getCurrentWindow()
-        win.webContents.send(messages.SHORTCUT_ACTIVE_FRAME_CLONE, {
+        currentWindow.webContents.send(messages.SHORTCUT_ACTIVE_FRAME_CLONE, {
           [navType]: true,
           openInForeground: !!e.shiftKey
         })
@@ -548,14 +573,13 @@ class Main extends ImmutableComponent {
   }
 
   onDoubleClick (e) {
-    const win = remote.getCurrentWindow()
     if (!e.target.className.includes('navigatorWrapper')) {
       return
     }
-    if (win.isMaximized()) {
-      win.maximize()
+    if (currentWindow.isMaximized()) {
+      currentWindow.maximize()
     } else {
-      win.unmaximize()
+      currentWindow.unmaximize()
     }
   }
 
@@ -660,7 +684,6 @@ class Main extends ImmutableComponent {
     const activeRequestedLocation = this.activeRequestedLocation
     const noScriptIsVisible = this.props.windowState.getIn(['ui', 'noScriptInfo', 'isVisible'])
     const releaseNotesIsVisible = this.props.windowState.getIn(['ui', 'releaseNotes', 'isVisible'])
-    const braveryDefaults = siteSettings.braveryDefaults(this.props.appState, appConfig)
     const braverySettings = siteSettings.activeSettings(activeSiteSettings, this.props.appState, appConfig)
 
     const shouldAllowWindowDrag = !this.props.windowState.get('contextMenuDetail') &&
@@ -717,7 +740,18 @@ class Main extends ImmutableComponent {
             navbar={activeFrame && activeFrame.get('navbar')}
             frames={this.props.windowState.get('frames')}
             sites={this.props.appState.get('sites')}
-            activeFrame={activeFrame}
+            activeFrameKey={activeFrame && activeFrame.get('key') || undefined}
+            location={activeFrame && activeFrame.get('location') || ''}
+            title={activeFrame && activeFrame.get('title') || ''}
+            scriptsBlocked={activeFrame && activeFrame.getIn(['noScript', 'blocked'])}
+            partitionNumber={activeFrame && activeFrame.get('partitionNumber') || 0}
+            history={activeFrame && activeFrame.get('history') || emptyList}
+            suggestionIndex={activeFrame && activeFrame.getIn(['navbar', 'urlbar', 'suggestions', 'selectedIndex']) || 0}
+            isSecure={activeFrame && activeFrame.getIn(['security', 'isSecure'])}
+            locationValueSuffix={activeFrame && activeFrame.getIn(['navbar', 'urlbar', 'suggestions', 'urlSuffix']) || ''}
+            startLoadTime={activeFrame && activeFrame.get('startLoadTime') || undefined}
+            endLoadTime={activeFrame && activeFrame.get('endLoadTime') || undefined}
+            loading={activeFrame && activeFrame.get('loading')}
             mouseInTitlebar={this.props.windowState.getIn(['ui', 'mouseInTitlebar'])}
             searchDetail={this.props.windowState.get('searchDetail')}
             enableNoScript={this.enableNoScript(activeSiteSettings)}
@@ -778,8 +812,12 @@ class Main extends ImmutableComponent {
           </div>
         </div>
         <UpdateBar updates={this.props.appState.get('updates')} />
-        <NotificationBar notifications={this.props.appState.get('notifications')}
-          activeFrame={activeFrame} />
+        {
+          this.props.appState.get('notifications') && this.props.appState.get('notifications').size && activeFrame
+          ? <NotificationBar notifications={this.props.appState.get('notifications')}
+            activeFrame={activeFrame} />
+          : null
+        }
         {
           showBookmarksToolbar
           ? <BookmarksToolbar
@@ -787,7 +825,7 @@ class Main extends ImmutableComponent {
             showFavicon={showFavicon}
             showOnlyFavicon={showOnlyFavicon}
             shouldAllowWindowDrag={shouldAllowWindowDrag}
-            activeFrame={activeFrame}
+            activeFrameKey={activeFrame && activeFrame.get('key') || undefined}
             windowWidth={this.props.appState.get('defaultWindowWidth')}
             contextMenuDetail={this.props.windowState.get('contextMenuDetail')}
             sites={this.props.appState.get('sites')} />
@@ -813,11 +851,11 @@ class Main extends ImmutableComponent {
           draggingOverData={this.props.windowState.getIn(['ui', 'dragging', 'draggingOver', 'dragType']) === dragTypes.TAB && this.props.windowState.getIn(['ui', 'dragging', 'draggingOver'])}
           previewTabs={getSetting(settings.SHOW_TAB_PREVIEWS)}
           tabsPerTabPage={tabsPerPage}
-          tabs={this.props.windowState.getIn(['ui', 'tabs'])}
-          frames={this.props.windowState.get('frames')}
+          tabPageIndex={this.props.windowState.getIn(['ui', 'tabs', 'tabPageIndex'])}
+          tabs={this.props.windowState.get('tabs')}
           sites={this.props.appState.get('sites')}
           key='tab-bar'
-          activeFrame={activeFrame}
+          activeFrameKey={activeFrame && activeFrame.get('key') || undefined}
           onMenu={this.onHamburgerMenu}
         />
       </div>
@@ -830,29 +868,46 @@ class Main extends ImmutableComponent {
               ref={(node) => { this.frames[frame.get('key')] = node }}
               prefOpenInForeground={getSetting(settings.SWITCH_TO_NEW_TABS)}
               onCloseFrame={this.onCloseFrame}
-              braveryDefaults={braveryDefaults}
-              frame={frame}
+              frameKey={frame.get('key')}
               key={frame.get('key')}
               settings={getBaseUrl(frame.get('location')) === 'about:preferences'
-                ? this.props.appState.get('settings') || new Immutable.Map()
+                ? this.props.appState.get('settings') || emptyMap
                 : null}
               bookmarks={frame.get('location') === 'about:bookmarks'
                 ? this.props.appState.get('sites')
                     .filter((site) => site.get('tags')
-                      .includes(siteTags.BOOKMARK)) || new Immutable.Map()
+                      .includes(siteTags.BOOKMARK)) || emptyMap
                 : null}
-              downloads={this.props.appState.get('downloads') || new Immutable.Map()}
+              downloads={this.props.appState.get('downloads') || emptyMap}
               bookmarkFolders={frame.get('location') === 'about:bookmarks'
                 ? this.props.appState.get('sites')
                     .filter((site) => site.get('tags')
-                      .includes(siteTags.BOOKMARK_FOLDER)) || new Immutable.Map()
+                      .includes(siteTags.BOOKMARK_FOLDER)) || emptyMap
                 : null}
+              isFullScreen={frame.get('isFullScreen') && frame.get('showFullScreenWarning')}
+              findbarShown={frame.get('findbarShown')}
+              findbarSelected={frame.get('findbarSelected')}
+              findDetail={frame.get('findDetail')}
+              hrefPreview={frame.get('hrefPreview')}
+              showOnRight={frame.get('showOnRight')}
+              location={frame.get('location')}
+              isPrivate={frame.get('isPrivate')}
+              partitionNumber={frame.get('partitionNumber')}
+              activeShortcut={frame.get('activeShortcut')}
+              activeShortcutDetail={frame.get('activeShortcutDetail')}
+              provisionalLocation={frame.get('provisionalLocation')}
+              pinnedLocation={frame.get('pinnedLocation')}
+              src={frame.get('src')}
+              guestInstanceId={frame.get('guestInstanceId')}
+              tabId={frame.get('tabId')}
+              aboutDetails={frame.get('aboutDetails')}
+              unloaded={frame.get('unloaded')}
+              audioMuted={frame.get('audioMuted')}
               passwords={this.props.appState.get('passwords')}
               flashInitialized={this.props.appState.get('flashInitialized')}
               allSiteSettings={allSiteSettings}
               ledger={ledgerInterop.generalCommunications()}
               frameSiteSettings={this.frameSiteSettings(frame.get('location'))}
-              frameBraverySettings={this.frameBraverySettings(frame.get('location'))}
               enableNoScript={this.enableNoScript(this.frameSiteSettings(frame.get('location')))}
               isPreview={frame.get('key') === this.props.windowState.get('previewFrameKey')}
               isActive={FrameStateUtil.isFrameKeyActive(this.props.windowState, frame.get('key'))}
