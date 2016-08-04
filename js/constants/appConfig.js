@@ -100,6 +100,7 @@ module.exports = {
     'bookmarks.toolbar.show': false,
     'bookmarks.toolbar.showFavicon': false,
     'bookmarks.toolbar.showOnlyFavicon': false,
+    'payments.enabled': false,
     'privacy.do-not-track': false,
     'security.passwords.manager-enabled': true,
     'security.passwords.one-password-enabled': false,
