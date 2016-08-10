@@ -4,14 +4,13 @@
 
 const React = require('react')
 const ImmutableComponent = require('./immutableComponent')
-const classnames = require('classnames')
 
 /**
  * Represents a modal overlay
  */
 
 class ModalOverlay extends ImmutableComponent {
-  getDialogContent () {
+  get dialogContent () {
     var close = null
     var button = null
     var title = null
@@ -27,17 +26,12 @@ class ModalOverlay extends ImmutableComponent {
       {button}
     </div>
   }
+
   render () {
-    return <div className={classnames('modal fade', { hidden: !this.props.shouldShow })} role='alert'>
-      {this.getDialogContent()}
+    return <div className='modal fade' role='alert'>
+      {this.dialogContent}
     </div>
   }
-}
-
-ModalOverlay.propTypes = {
-  title: React.PropTypes.string.isRequired,
-  onShow: React.PropTypes.func.isRequired,
-  onHide: React.PropTypes.func.isRequired
 }
 
 module.exports = ModalOverlay

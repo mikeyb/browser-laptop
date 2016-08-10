@@ -196,13 +196,10 @@ class LedgerTable extends ImmutableComponent {
 }
 
 class BitcoinDashboard extends ImmutableComponent {
-  componentWillMount () {
-    this.setState({ shouldShowOverlay: false })
-  }
   get ledgerData () {
     return this.props.ledgerData
   }
-  getOverlayContent () {
+  get overlayContent () {
     return <iframe src={this.ledgerData.get('buyURL')} />
   }
   copyToClipboard (text) {
@@ -212,24 +209,15 @@ class BitcoinDashboard extends ImmutableComponent {
   goToURL (url) {
     return window.open(url, '_blank')
   }
-  onMessage (event) {
-    if (event.type === 'message' && (!event.data || !event.data.event || event.data.event !== 'modal_closed')) {
-      return false
-    }
-    this.hideOverlay()
-  }
-  hideOverlay () {
-    this.setState({ shouldShowOverlay: false })
-  }
-  showOverlay (event) {
-    this.setState({ shouldShowOverlay: true })
-  }
   render () {
     var emptyDialog = true
-    window.addEventListener('message', this.onMessage.bind(this), false)
 // if someone can figure out how to get a localized title attribute (bitcoinCopyAddress) here, please do so!
     return <div id='bitcoinDashboard'>
-      <ModalOverlay title={'bitcoinBuy'} content={this.getOverlayContent()} emptyDialog={emptyDialog} shouldShow={this.state.shouldShowOverlay} onShow={this.showOverlay.bind(this)} onHide={this.hideOverlay.bind(this)} />
+      {
+      this.props.bitcoinOverlayVisible
+        ? <ModalOverlay title={'bitcoinBuy'} content={this.overlayContent} emptyDialog={emptyDialog} onHide={this.props.hideOverlay.bind(this)} />
+        : null
+      }
       <div>{this.ledgerData.get('statusText')}</div>
       <div className='board'>
         <div className='panel'>
@@ -243,7 +231,7 @@ class BitcoinDashboard extends ImmutableComponent {
         <div className='panel'>
           <div className='settingsListTitle' data-l10n-id='moneyAdd' />
           <div id='coinbaseLogo' />
-          <button data-l10n-id='add' onClick={this.showOverlay.bind(this)} />
+          <button data-l10n-id='add' onClick={this.props.showOverlay.bind(this)} />
         </div>
       </div>
     </div>
@@ -399,45 +387,41 @@ class TabsTab extends ImmutableComponent {
 }
 
 class PaymentsTab extends ImmutableComponent {
-  componentWillMount () {
-    this.setState({ shouldShowOverlay: false })
-  }
-
-  getTableContent () {
+  get tableContent () {
     return this.props.ledgerData.get('enabled') ? <LedgerTable ledgerData={this.props.ledgerData} /> : <div className='pull-left' data-l10n-id='tableEmptyText' />
   }
-  getButtonContent () {
+  get buttonContent () {
     return this.props.ledgerData.get('buttonLabel') && this.props.ledgerData.get('buttonURL') ? <a className='settingsListTitle pull-right' href={this.props.ledgerData.get('buttonURL')}>{this.props.ledgerData.get('buttonLabel')}</a> : null
   }
-  getNotificationContent () {
+  get notificationContent () {
     return this.props.ledgerData.get('statusText') ? <div className='notificationBar'>
       <div className='pull-left'>{this.props.ledgerData.get('statusText')}</div>
     </div> : <div className='notificationBar'>
       <div className='pull-left' data-l10n-id='notificationEmptyText' />
     </div>
   }
-  getOverlayContent () {
-    return <BitcoinDashboard ledgerData={this.props.ledgerData} />
+  get overlayContent () {
+    return <BitcoinDashboard ledgerData={this.props.ledgerData}
+      showOverlay={this.props.showOverlay.bind(this)}
+      hideOverlay={this.props.hideOverlay.bind(this)} />
   }
-  getFundingLink () {
-    return this.props.ledgerData.get('address') ? <div className='settingsListLink pull-right' data-l10n-id='addFundsTitle' value='addFundsTitle' onClick={this.showOverlay.bind(this)} /> : null
-  }
-  hideOverlay (event) {
-    this.setState({ shouldShowOverlay: false })
-  }
-  showOverlay (event) {
-    this.setState({ shouldShowOverlay: true })
+  get fundingLink () {
+    return this.props.ledgerData.get('address') ? <div className='settingsListLink pull-right' data-l10n-id='addFundsTitle' value='addFundsTitle' onClick={this.props.showOverlay.bind(this)} /> : null
   }
   render () {
     return this.props.ledgerData.get('enabled') ? <div id='paymentsContainer'>
-      <ModalOverlay title={'addFunds'} content={this.getOverlayContent()} shouldShow={this.state.shouldShowOverlay} onShow={this.showOverlay.bind(this)} onHide={this.hideOverlay.bind(this)} />
+      {
+      this.props.bitcoinOverlayVisible
+        ? <ModalOverlay title={'addFunds'} content={this.overlayContent} onHide={this.props.hideOverlay.bind(this)} />
+        : null
+      }
       <div className='titleBar'>
         <div className='settingsListTitle pull-left' data-l10n-id='publisherPaymentsTitle' value='publisherPaymentsTitle' />
-        {this.getButtonContent()}
-        {this.getFundingLink()}
+        {this.buttonContent}
+        {this.fundingLink}
       </div>
-      {this.getNotificationContent()}
-      {this.getTableContent()}
+      {this.notificationContent}
+      {this.tableContent}
     </div> : <div className='emptyMessage' data-l10n-id='publisherEmptyText' />
   }
 }
@@ -773,6 +757,7 @@ class AboutPreferences extends React.Component {
     super()
     let hash = window.location.hash ? window.location.hash.slice(1) : ''
     this.state = {
+      bitcoinOverlayVisible: false,
       preferenceTab: hash.toUpperCase() in preferenceTabs ? hash : preferenceTabs.GENERAL,
       hintNumber: this.getNextHintNumber(),
       languageCodes: Immutable.Map(),
@@ -845,6 +830,12 @@ class AboutPreferences extends React.Component {
     }
   }
 
+  setBitcoinOverlayVisible (isVisible) {
+    this.setState({
+      bitcoinOverlayVisible: isVisible
+    })
+  }
+
   render () {
     let tab
     const settings = this.state.settings
@@ -869,7 +860,12 @@ class AboutPreferences extends React.Component {
         tab = <ShieldsTab settings={settings} siteSettings={siteSettings} braveryDefaults={braveryDefaults} onChangeSetting={this.onChangeSetting} />
         break
       case preferenceTabs.PUBLISHERS:
-        tab = <PaymentsTab settings={settings} siteSettings={siteSettings} braveryDefaults={braveryDefaults} ledgerData={ledgerData} onChangeSetting={this.onChangeSetting} />
+        tab = <PaymentsTab settings={settings} siteSettings={siteSettings}
+          braveryDefaults={braveryDefaults} ledgerData={ledgerData}
+          onChangeSetting={this.onChangeSetting}
+          bitcoinOverlayVisible={this.state.bitcoinOverlayVisible}
+          showOverlay={this.setBitcoinOverlayVisible.bind(this, true)}
+          hideOverlay={this.setBitcoinOverlayVisible.bind(this, false)} />
         break
       case preferenceTabs.SECURITY:
         tab = <SecurityTab settings={settings} siteSettings={siteSettings} braveryDefaults={braveryDefaults} flashInstalled={this.state.flashInstalled} onChangeSetting={this.onChangeSetting} />
