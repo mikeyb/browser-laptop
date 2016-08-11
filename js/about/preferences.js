@@ -196,6 +196,10 @@ class LedgerTable extends ImmutableComponent {
 }
 
 class BitcoinDashboard extends ImmutableComponent {
+  constructor () {
+    super()
+    this.buyCompleted = false
+  }
   get ledgerData () {
     return this.props.ledgerData
   }
@@ -209,8 +213,18 @@ class BitcoinDashboard extends ImmutableComponent {
     window.open(url, '_blank')
   }
   onMessage (e) {
-    if (e.data && e.data.event === 'modal_closed' && e.origin === 'https://buy.coinbase.com') {
-      this.props.hideOverlay()
+    if (!e.data || e.origin !== config.coinbaseOrigin) {
+      return
+    }
+    if (e.data.event === 'modal_closed') {
+      if (this.buyCompleted) {
+        this.props.hideParentOverlay()
+        this.buyCompleted = false
+      } else {
+        this.props.hideOverlay()
+      }
+    } else if (e.data.event === 'buy_completed') {
+      this.buyCompleted = true
     }
   }
   render () {
@@ -409,7 +423,8 @@ class PaymentsTab extends ImmutableComponent {
     return <BitcoinDashboard ledgerData={this.props.ledgerData}
       bitcoinOverlayVisible={this.props.bitcoinOverlayVisible}
       showOverlay={this.props.showOverlay.bind(this, 'bitcoin')}
-      hideOverlay={this.props.hideOverlay.bind(this, 'bitcoin')} />
+      hideOverlay={this.props.hideOverlay.bind(this, 'bitcoin')}
+      hideParentOverlay={this.props.hideOverlay.bind(this, 'addFunds')} />
   }
   get fundingLink () {
     return this.props.ledgerData.get('address') ? <div className='settingsListLink pull-right' data-l10n-id='addFundsTitle' value='addFundsTitle' onClick={this.props.showOverlay.bind(this, 'addFunds')} /> : null
