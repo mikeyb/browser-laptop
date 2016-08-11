@@ -430,20 +430,22 @@ class PaymentsTab extends ImmutableComponent {
     return this.props.ledgerData.get('address') ? <div className='settingsListLink pull-right' data-l10n-id='addFundsTitle' value='addFundsTitle' onClick={this.props.showOverlay.bind(this, 'addFunds')} /> : null
   }
   render () {
-    return this.props.ledgerData.get('enabled') ? <div id='paymentsContainer'>
-      {
-      this.props.addFundsOverlayVisible
-        ? <ModalOverlay title={'addFunds'} content={this.overlayContent} onHide={this.props.hideOverlay.bind(this, 'addFunds')} />
-        : null
-      }
-      <div className='titleBar'>
-        <div className='sectionTitle pull-left' data-l10n-id='publisherPaymentsTitle' value='publisherPaymentsTitle' />
-        {this.buttonContent}
-        {this.fundingLink}
+    return this.props.ledgerData.get('enabled')
+      ? <div id='paymentsContainer'>
+        {
+        this.props.addFundsOverlayVisible
+          ? <ModalOverlay title={'addFunds'} content={this.overlayContent} onHide={this.props.hideOverlay.bind(this, 'addFunds')} />
+          : null
+        }
+        <div className='titleBar'>
+          <div className='sectionTitle pull-left' data-l10n-id='publisherPaymentsTitle' value='publisherPaymentsTitle' />
+          {this.buttonContent}
+          {this.fundingLink}
+        </div>
+        {this.notificationContent}
+        {this.tableContent}
       </div>
-      {this.notificationContent}
-      {this.tableContent}
-    </div> : <div className='emptyMessage' data-l10n-id='publisherEmptyText' />
+      : <div><div className='emptyMessage' data-l10n-id='publisherEmptyText' /></div>
   }
 }
 
